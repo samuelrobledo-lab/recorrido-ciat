@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recorrido Raíces y Cantos · Propuesta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="estilos.css" />
+  <script type="importmap">
+    { "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
+</head>
+<body>
+  <canvas id="escena"></canvas>
+
+  <div id="carga">
+    <div class="carga-caja">
+      <div class="hoja"></div>
+      <p class="carga-titulo">Cargando el recorrido</p>
+      <div class="barra"><span id="carga-barra"></span></div>
+      <p id="carga-pct">0%</p>
+    </div>
+  </div>
+
+  <header id="cabecera">
+    <div>
+      <h1 id="titulo-proyecto"></h1>
+      <p id="subtitulo-proyecto"></p>
+    </div>
+    <div class="acciones"><button id="btn-ayuda" title="Cómo moverse">?</button><button id="btn-libre" title="Explorar con el mouse">Explorar libre</button></div>
+  </header>
+
+  <nav id="indice" aria-label="Puntos del recorrido"></nav>
+
+
+  <aside id="tarjetas"></aside>
+
+  <div id="pista-scroll">Desliza para recorrer <span>↓</span></div>
+  <div id="marcadores"></div>
+  <div id="ayuda-libre">
+    <h3>Explora libremente</h3>
+    <ul>
+      <li><b>Arrastra</b> para moverte por el mapa</li>
+      <li><b>Clic derecho</b> (o Shift) + arrastrar para girar</li>
+      <li><b>Rueda</b> para acercar o alejar</li>
+      <li><b>Doble clic</b> para volar a un punto</li>
+      <li><b>W A S D</b> para caminar</li>
+      <li>Toca un <b>marcador numerado</b> para ver la información de la estación</li>
+    </ul>
+    <p class="cerrar">Toca en cualquier parte para empezar</p>
+  </div>
+
+  <main id="scroller"></main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
