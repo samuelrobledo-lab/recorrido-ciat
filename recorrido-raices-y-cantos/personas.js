@@ -5,13 +5,25 @@ import * as THREE from 'three';
 const PIEL = ['#8d5a3b', '#c68a5e', '#e2b48c', '#6b4430', '#a8714a'];
 const ROPA = ['#c7653d', '#4f7d3c', '#d9a521', '#3f6e8c', '#e9e2cf', '#8c5b37', '#b5c936', '#4169d8'];
 const PANTALON = ['#2f3b4a', '#5a4a3a', '#3d3d3d', '#6b6f78', '#2e4a3a'];
-const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true });
+// Materiales y geometrías compartidos entre todas las personas (menos memoria y cambios de estado)
+const MATS = new Map(), GEOS = new Map();
+const mat = (c) => {
+  if (!MATS.has(c)) MATS.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, flatShading: true }));
+  return MATS.get(c);
+};
+const geo = (clave, crear) => {
+  if (!GEOS.has(clave)) GEOS.set(clave, crear());
+  return GEOS.get(clave);
+};
+const cilindro = (r1, r2, h, lados) =>
+  geo(`c${r1.toFixed(4)}|${r2.toFixed(4)}|${h.toFixed(4)}|${lados}`, () => new THREE.CylinderGeometry(r1, r2, h, lados));
+const esfera = (r) => geo(`e${r.toFixed(4)}`, () => new THREE.IcosahedronGeometry(r, 0));
 const pick = (arr, i) => arr[i % arr.length];
 
 function miembro(radio, largo, material) {
   // cilindro con el pivote en el extremo superior (hombro / cadera)
   const g = new THREE.Group();
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(radio, radio * 0.85, largo, 6), material);
+  const m = new THREE.Mesh(cilindro(radio, radio * 0.85, largo, 6), material);
   m.position.y = -largo / 2;
   g.add(m);
   return g;
@@ -31,10 +43,10 @@ export function crearPersona(tipo, semilla = 0, escala = 1) {
     cuerpo.add(p);
     return p;
   });
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.105 * H, 0.085 * H, 0.33 * H, 7), ropa);
+  const torso = new THREE.Mesh(cilindro(0.105 * H, 0.085 * H, 0.33 * H, 7), ropa);
   torso.position.y = cadera + 0.165 * H;
   cuerpo.add(torso);
-  const cabeza = new THREE.Mesh(new THREE.IcosahedronGeometry(0.068 * H, 0), piel);
+  const cabeza = new THREE.Mesh(esfera(0.068 * H), piel);
   cabeza.position.y = cadera + 0.33 * H + 0.09 * H;
   cuerpo.add(cabeza);
   const hombro = cadera + 0.3 * H;
@@ -42,7 +54,7 @@ export function crearPersona(tipo, semilla = 0, escala = 1) {
     const b = miembro(0.032 * H, 0.36 * H, ropa);
     b.position.set(s * 0.125 * H, hombro, 0);
     b.rotation.z = s * 0.08;
-    const mano = new THREE.Mesh(new THREE.IcosahedronGeometry(0.028 * H, 0), piel);
+    const mano = new THREE.Mesh(esfera(0.028 * H), piel);
     mano.position.y = -0.38 * H;
     b.add(mano);
     cuerpo.add(b);
@@ -124,7 +136,23 @@ const circulo = (r, n = 24) => Array.from({ length: n + 1 }, (_, k) => {
   const a = (k / n) * Math.PI * 2;
   return [FUENTE[0] + r * Math.cos(a), FUENTE[1] + r * Math.sin(a)];
 });
-const circuloSendero = circulo(24, 96);                 // el sendero circular de los decks
+// El sendero circular pasa por el centro de los decks: al llegar a cada uno, la gente lo
+// bordea por dentro (del lado de la fuente) en un arco a RADIO_DECK del centro del deck.
+const RADIO_SENDERO = 24, RADIO_DECK = 6.2;
+const ANG_DECKS = DECKS.map(([x, y]) => Math.atan2(y - FUENTE[1], x - FUENTE[0]));
+const circuloSendero = Array.from({ length: 241 }, (_, k) => {
+  const a = (k / 240) * Math.PI * 2;
+  let r = RADIO_SENDERO;
+  for (const ad of ANG_DECKS) {
+    const d = Math.atan2(Math.sin(a - ad), Math.cos(a - ad));
+    const lateral = RADIO_SENDERO * Math.abs(Math.sin(d));
+    if (Math.abs(d) < Math.PI / 2 && lateral < RADIO_DECK) {
+      // punto del círculo alrededor del deck que queda hacia la fuente
+      r = Math.min(r, RADIO_SENDERO * Math.cos(d) - Math.sqrt(RADIO_DECK ** 2 - lateral ** 2));
+    }
+  }
+  return [FUENTE[0] + r * Math.cos(a), FUENTE[1] + r * Math.sin(a)];
+});
 const entrada = [[18.8, -30.6], [12.0, -33.6], [5.0, -38.6], [0.0, -43.0], [-9.6, -46.6]];
 const RUTAS = [
   // Por el sendero hecho: entran desde las casetas, dan la vuelta por los 3 decks y salen

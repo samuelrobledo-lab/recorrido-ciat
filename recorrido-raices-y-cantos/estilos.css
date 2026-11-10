@@ -148,12 +148,88 @@ body.libre #tarjetas { z-index: 7; }
 body.libre #escena { z-index: 3; }
 body.interactivo #escena { z-index: 3; }
 
+.solo-tactil { display: none !important; }
+@media (pointer: coarse) {
+  .solo-tactil { display: grid !important; }
+  .solo-mouse { display: none !important; }
+}
+html { -webkit-text-size-adjust: 100%; }
+button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+#scroller section { height: 150svh; }
+#scroller section:last-child { height: 100svh; }
+
+/* ---------- Día / noche ---------- */
+#btn-noche { border: 0; cursor: pointer; height: 40px; padding: 0 14px 0 11px; border-radius: 99px;
+  display: inline-flex; align-items: center; gap: 7px; font: 700 .82rem 'Source Sans 3', sans-serif;
+  background: rgba(251,249,243,.92); color: var(--bosque); box-shadow: var(--sombra); transition: background .3s, color .3s; }
+#btn-noche svg { width: 18px; height: 18px; fill: currentColor; stroke: currentColor; }
+#btn-noche .ico-luna { stroke: none; }
+#btn-noche .ico-sol { display: none; }
+body.noche #btn-noche { background: #1d2a4a; color: #ffd9a3; }
+body.noche #btn-noche .ico-luna { display: none; }
+body.noche #btn-noche .ico-sol { display: block; }
+#fundido { position: fixed; inset: 0; z-index: 8; background: #0a1226; opacity: 0; pointer-events: none;
+  transition: opacity .35s ease; }
+#fundido.activo { opacity: 1; }
+#aviso-noche { position: fixed; left: 50%; top: 86px; translate: -50% -8px; z-index: 9; width: max-content;
+  max-width: min(440px, 88vw); text-align: center; font-size: .86rem; line-height: 1.4; color: #ffe2b8;
+  background: rgba(16, 26, 52, .9); backdrop-filter: blur(6px); padding: 10px 16px; border-radius: 12px;
+  box-shadow: var(--sombra); opacity: 0; pointer-events: none; transition: opacity .5s, translate .5s; }
+#aviso-noche.visible { opacity: 1; translate: -50% 0; }
+/* De noche, la cabecera y el índice en tonos oscuros para no encandilar */
+body.noche #cabecera > div:first-child { background: rgba(16, 26, 52, .82); }
+body.noche #cabecera h1 { color: #f3ead8; }
+body.noche #cabecera p { color: #c9d3e8; }
+body.noche #btn-ayuda { background: rgba(29, 42, 74, .92); color: #f3ead8; }
+body.noche #indice .punto { background: rgba(243, 234, 216, .35); }
+body.noche #indice .etiqueta { background: rgba(16, 26, 52, .9); color: #f3ead8; }
+body.noche #pista-scroll { background: rgba(16, 26, 52, .85); color: #f3ead8; }
+body.noche #btn-libre { background: #f3ead8; color: #1d2a4a; }
+
+/* ---------- Celular ---------- */
 @media (max-width: 720px) {
-  #cabecera { padding: 14px; }
-  #cabecera h1 { font-size: 1.05rem; }
-  #indice { right: 10px; }
+  #cabecera { padding: max(10px, env(safe-area-inset-top)) 12px 0; gap: 8px; align-items: center; }
+  #cabecera > div:first-child { padding: 8px 12px; border-radius: 11px; min-width: 0; }
+  #cabecera h1 { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #cabecera p { display: none; }
+  #btn-libre { padding: 9px 13px; font-size: .78rem; white-space: nowrap; }
+  #btn-ayuda { width: 36px; height: 36px; }
+  #btn-noche { height: 36px; width: 36px; padding: 0; justify-content: center; }
+  #btn-noche .txt { display: none; }
+  #aviso-noche { top: calc(max(10px, env(safe-area-inset-top)) + 56px); font-size: .8rem; }
+
+  #indice { right: 6px; gap: 7px; }
   #indice .etiqueta { display: none; }
-  .tarjeta, .tarjeta.der { left: 14px; right: 36px; bottom: 16px; width: auto; padding: 18px; }
-  .tarjeta h2 { font-size: 1.3rem; }
+  #indice .punto { width: 7px; height: 7px; }
+
+  .tarjeta, .tarjeta.der { left: 10px; right: 10px; bottom: max(10px, env(safe-area-inset-bottom));
+    width: auto; padding: 14px 16px 12px; border-radius: 15px; border-top-width: 5px;
+    max-height: 40svh; overflow-y: auto; overscroll-behavior: contain; }
+  .tarjeta .cabeza { margin-bottom: 4px; }
+  .tarjeta .num { width: 26px; height: 26px; font-size: .85rem; }
+  .tarjeta h2 { font-size: 1.2rem; margin: 2px 0 6px; }
+  .tarjeta p { font-size: .88rem; line-height: 1.45; margin-bottom: 8px; }
+  .tarjeta dl { font-size: .78rem; padding-top: 8px; gap: 4px 12px; }
+  .tarjeta .accion { margin-top: 6px; }
+
+  #pista-scroll { display: block; bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 52px);
+    font-size: .75rem; padding: 6px 12px; }
+  body.libre #pista-scroll { display: none; }
+
+  #ayuda-libre { padding: 20px 20px 14px; }
+  #ayuda-libre h3 { font-size: 1.15rem; }
+  #ayuda-libre ul { font-size: .88rem; }
+  .marcador .gota { width: 30px; height: 30px; }
+  .marcador .nombre { opacity: 1; translate: 0 0; font-size: .68rem; padding: 3px 7px; }
+}
+@media (max-height: 500px) {   /* celular acostado */
+  #cabecera { padding: 10px 14px 0; }
+  #cabecera p { display: none; }
+  #cabecera h1 { font-size: 1rem; }
+  .tarjeta { width: 320px; padding: 14px 16px 12px; bottom: 10px; max-height: calc(100svh - 74px);
+    overflow-y: auto; }
+  .tarjeta.der { right: 40px; }
+  .tarjeta h2 { font-size: 1.2rem; margin: 2px 0 6px; }
+  .tarjeta p { font-size: .86rem; margin-bottom: 8px; }
   #pista-scroll { display: none; }
 }

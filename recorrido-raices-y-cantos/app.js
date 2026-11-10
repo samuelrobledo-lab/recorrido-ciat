@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MapControls } from 'three/addons/controls/MapControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PUNTOS, PROYECTO } from './puntos.js';
 import { ubicarPersonas, crearCaminantes, animarPersonas, PERSONAS_EXTRA } from './personas.js';
 
@@ -21,10 +22,18 @@ const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v
 // Blender (Z arriba) -> three.js (Y arriba)
 const v3 = ([x, y, z]) => new THREE.Vector3(x, z, -y);
 
+// ---------------------------------------------------------------- Dispositivo
+// Celulares y tabletas: menos resolución y una sola sombra para que la experiencia vaya fluida
+const TACTIL = matchMedia('(pointer: coarse)').matches;
+const MOVIL = TACTIL && Math.min(screen.width, screen.height) < 820;
+const PR_MAX = Math.min(devicePixelRatio, MOVIL ? 1.5 : 2);
+let pixelRatio = PR_MAX;
+
 // ---------------------------------------------------------------- Escena
 const canvas = document.getElementById('escena');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !MOVIL || devicePixelRatio < 2,
+  logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 // Igual que los renders de los diseñadores (Eevee, vista "Standard" + "High Contrast"):
@@ -34,26 +43,37 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
-// Cielo turquesa con degradado, como en los renders
+// Cielo con degradado: turquesa de día (como en los renders) y azul profundo de noche
 const HORIZONTE = '#a9dcd4', CENIT = '#3aa6a3';
-{
+function cielo(paradas) {
   const c = document.createElement('canvas'); c.width = 2; c.height = 256;
   const g = c.getContext('2d'), grad = g.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, CENIT); grad.addColorStop(0.62, '#6fc3bd'); grad.addColorStop(1, HORIZONTE);
+  paradas.forEach(([t, col]) => grad.addColorStop(t, col));
   g.fillStyle = grad; g.fillRect(0, 0, 2, 256);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
-  scene.background = tex;
+  return tex;
 }
+const CIELO_DIA = cielo([[0, CENIT], [0.62, '#6fc3bd'], [1, HORIZONTE]]);
+const CIELO_NOCHE = cielo([[0, '#060b1d'], [0.6, '#101c3a'], [1, '#22335a']]);
+scene.background = CIELO_DIA;
 scene.fog = new THREE.Fog(HORIZONTE, 180, 520);
 
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.5, 1500);
+// En pantallas verticales se abre un poco el lente para que la estación no quede recortada
+function ajustarLente() {
+  camera.aspect = innerWidth / innerHeight;
+  camera.fov = camera.aspect < 1 ? 58 : 45;
+  camera.updateProjectionMatrix();
+}
+ajustarLente();
 
 // Luces copiadas de la escena de Blender: tres soles (Sun, Sun.001 y Sol) y luces cálidas por estación
 const bl = ([x, y, z]) => new THREE.Vector3(x, z, -y);      // dirección Blender -> three
-scene.add(new THREE.HemisphereLight('#bfe6df', '#58743d', 0.45));
+const hemi = new THREE.HemisphereLight('#bfe6df', '#58743d', 0.45);
+scene.add(hemi);
 const SOLES = [
-  { dir: [0.673, -0.416, -0.611], intensidad: 1.92, color: '#ffffff', sombra: 4096 },  // Sun
-  { dir: [-0.741, -0.416, -0.527], intensidad: 1.92, color: '#ffffff', sombra: 2048 }, // Sun.001
+  { dir: [0.673, -0.416, -0.611], intensidad: 1.92, color: '#ffffff', sombra: MOVIL ? 2048 : 4096 },  // Sun
+  { dir: [-0.741, -0.416, -0.527], intensidad: 1.92, color: '#ffffff', sombra: MOVIL ? 0 : 2048 },    // Sun.001
   { dir: [0.206, 0.64, -0.74], intensidad: 1.12, color: '#fff7e6', sombra: 0 },         // Sol
 ].map((s) => {
   const luz = new THREE.DirectionalLight(s.color, s.intensidad);
@@ -87,6 +107,7 @@ function actualizarSombras(mira) {
 // Luz que pasa por la flecha calada de cada señal de mapa: una mancha de luz con forma de
 // flecha proyectada en el suelo delante de la señal (la ranura real es muy delgada para que
 // la sombra en tiempo real la dibuje con nitidez)
+const manchasFlecha = [];
 const texFlecha = (() => {
   const c = document.createElement('canvas'); c.width = 512; c.height = 256;
   const g = c.getContext('2d');
@@ -103,6 +124,7 @@ const texFlecha = (() => {
   { pos: [30.4, 57.1], frente: [1.0, 0.1] },      // Señal de llegada (estación 1)
 ].forEach(({ pos, frente }) => {
   const n = new THREE.Vector2(...frente).normalize();
+  // (se guarda para apagarla de noche: sin sol no hay flecha proyectada)
   const t = new THREE.Vector2(-n.y, n.x);         // eje horizontal de la señal
   const mancha = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.45), new THREE.MeshBasicMaterial({
     map: texFlecha, color: '#ffd68a', transparent: true, opacity: 0.6,
@@ -115,18 +137,141 @@ const texFlecha = (() => {
   mancha.rotation.y = Math.atan2(t.y, t.x);       // eje X del plano alineado con +t
   mancha.rotation.x = -Math.PI / 2;
   mancha.name = 'Luz_Flecha';
+  manchasFlecha.push(mancha);
   scene.add(mancha);
 });
 
 // Luces cálidas (Point.001 … Point.006 de Blender) sobre las estaciones
-[[39.6, 58.8, 9.6], [45.4, 13.5, 13.9], [21.4, -34.0, 5.8], [14.2, -29.4, 5.8], [26.7, -68.4, 9.6]]
-  .forEach((p) => {
+const LUCES_DIA = [[39.6, 58.8, 9.6], [45.4, 13.5, 13.9], [21.4, -34.0, 5.8], [14.2, -29.4, 5.8], [26.7, -68.4, 9.6]]
+  .map((p) => {
     const l = new THREE.PointLight('#ffc07f', 55, 45, 2);
     l.position.copy(v3(p));
     scene.add(l);
+    return l;
   });
 
+// ---------------------------------------------------------------- Noche
+// El recorrido también se hace de noche para avistar aves nocturnas. Solo cambia la luz:
+//  · Luna: luz fría y tenue en lugar de los soles (se mantiene una sombra suave).
+//  · Luces de estación ámbar, bajas, de poca intensidad y corto alcance: la luz cálida (sin azul)
+//    y apuntando al suelo es la que menos perturba a búhos, currucutús y bienparados.
+//  · Luces de guía a ras de suelo en los senderos, muy tenues, solo para marcar el camino.
+//  · Sin luces altas ni hacia el dosel: los árboles quedan en penumbra para las aves.
+const AMBAR = '#ffad5a';
+const LUCES_NOCHE = [   // [x, y, z (altura), intensidad, alcance]  — coordenadas Blender
+  [31.5, 57.2, 0.9, 3.0, 5],     // 1 · mapa de llegada (ilumina el mapa para leerlo)
+  [32.4, 13.0, 2.2, 3.5, 6],     // 2 · bajo el techo del juego
+  [33.9, -31.2, 1.7, 1.8, 6],    // 3 · frente al arco de entrada
+  [21.6, -24.2, 2.2, 3.0, 5],    // 4 y 5 · bajo el techo de la caseta del kit (la guía)
+  [-21.6, -25.8, 1.1, 2.0, 5.5], // 6 · deck 1, a la altura de las bancas (no alumbra hacia el dosel)
+  [-57.6, -46.6, 1.1, 2.0, 5.5], // 7 · deck 2
+  [-21.6, -67.4, 1.1, 2.0, 5.5], // 8 · deck 3
+  [16.1, -36.9, 2.2, 3.0, 5],    // 9 · bajo el techo de la caseta del pasaporte
+  [38.7, -71.6, 0.9, 3.0, 5],    // 10 · mapa de salida
+].map(([x, y, z, i, d]) => {
+  const l = new THREE.PointLight(AMBAR, i, d, 2);
+  l.position.copy(v3([x, y, z]));
+  l.userData.intensidad = i;
+  l.visible = false;
+  scene.add(l);
+  return l;
+});
+// Luces de guía: manchas de luz ámbar a ras de suelo cada pocos metros sobre los senderos
+// (una sola malla para todas, casi sin costo)
+const lucesGuia = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.35, 'rgba(255,255,255,.45)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  const F = [-33.6, -46.6], DECKS = [[-21.6, -25.8], [-57.6, -46.6], [-21.6, -67.4]];
+  const pts = [];
+  const tramo = (a, b, paso) => {
+    const n = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / paso));
+    for (let k = 0; k < n; k++) pts.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+  };
+  const entrada = [[33.5, -31.0], [25, -30.6], [18.8, -30.6], [9, -36], [0, -43], [-9.6, -46.6]];
+  for (let i = 1; i < entrada.length; i++) tramo(entrada[i - 1], entrada[i], 6);
+  for (let k = 0; k < 20; k++) {                       // sendero circular de los decks
+    const a = (k / 20) * Math.PI * 2, p = [F[0] + 24 * Math.cos(a), F[1] + 24 * Math.sin(a)];
+    if (DECKS.every(([x, y]) => Math.hypot(p[0] - x, p[1] - y) > 6)) pts.push(p);
+  }
+  tramo([33.4, 50], [33.4, -26], 8);                   // borde de la vía hacia el portal
+  tramo([33.6, -36], [33.6, -66], 8);                  // y hacia la señal de salida
+  const geos = pts.map(([x, y]) => new THREE.PlaneGeometry(2.6, 2.6).rotateX(-Math.PI / 2).translate(x, 0.16, -y));
+  const m = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshBasicMaterial({
+    map: tex, color: AMBAR, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  m.name = 'Luces_Guia'; m.visible = false; m.renderOrder = 2;
+  scene.add(m);
+  return m;
+})();
+// Estrellas: puntos tenues en una cúpula lejana
+const estrellas = (() => {
+  const n = 900, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, h = 0.08 + Math.random() * 0.92;   // solo sobre el horizonte
+    const r = 1100, cy = Math.sqrt(1 - h * h);
+    pos.set([Math.cos(a) * cy * r, h * r, Math.sin(a) * cy * r], i * 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const p = new THREE.Points(g, new THREE.PointsMaterial({ color: '#dfe6ff', size: 1.6, sizeAttenuation: false,
+    transparent: true, opacity: 0.75, fog: false, depthWrite: false }));
+  p.visible = false; p.name = 'Estrellas';
+  scene.add(p);
+  return p;
+})();
+
+const DIA = { soles: SOLES.map((l) => [l.intensity, l.color.clone()]), hemi: [hemi.intensity, hemi.color.clone(), hemi.groundColor.clone()] };
+let noche = false;
+function aplicarNoche(on) {
+  noche = on;
+  document.body.classList.toggle('noche', on);
+  scene.background = on ? CIELO_NOCHE : CIELO_DIA;
+  scene.fog.color.set(on ? '#17233f' : HORIZONTE);
+  scene.fog.near = on ? 90 : 180; scene.fog.far = on ? 420 : 520;
+  // Luna (usa el primer sol, que es el que tiene la sombra principal)
+  SOLES.forEach((l, i) => {
+    if (on) {
+      l.visible = i === 0;
+      l.color.set('#9db4ff'); l.intensity = 0.42;
+    } else {
+      l.visible = true;
+      l.intensity = DIA.soles[i][0]; l.color.copy(DIA.soles[i][1]);
+    }
+  });
+  if (on) { hemi.intensity = 0.38; hemi.color.set('#3a5488'); hemi.groundColor.set('#15210f'); }
+  else { [hemi.intensity] = DIA.hemi; hemi.color.copy(DIA.hemi[1]); hemi.groundColor.copy(DIA.hemi[2]); }
+  LUCES_DIA.forEach((l) => (l.visible = !on));
+  LUCES_NOCHE.forEach((l) => (l.visible = on));
+  lucesGuia.visible = on;
+  estrellas.visible = on;
+  manchasFlecha.forEach((m) => (m.visible = !on));
+  btnNoche.setAttribute('aria-pressed', on);
+  btnNoche.querySelector('.txt').textContent = on ? 'Día' : 'Noche';
+  btnNoche.title = on ? 'Volver a la vista de día' : 'Ver el recorrido de noche';
+}
+
 // ---------------------------------------------------------------- UI
+const btnNoche = document.getElementById('btn-noche');
+const fundido = document.getElementById('fundido');
+const avisoNoche = document.getElementById('aviso-noche');
+let cambiandoLuz = false, avisoTimer = 0;
+btnNoche.onclick = () => {
+  if (cambiandoLuz) return;
+  cambiandoLuz = true;
+  fundido.classList.add('activo');                    // fundido corto: el cambio de luces no se ve a saltos
+  setTimeout(() => {
+    aplicarNoche(!noche);
+    setTimeout(() => {                                 // deja compilar las luces nuevas y descubre
+      fundido.classList.remove('activo');
+      cambiandoLuz = false;
+    }, 120);
+    clearTimeout(avisoTimer);
+    avisoNoche.classList.toggle('visible', noche);
+    if (noche) avisoTimer = setTimeout(() => avisoNoche.classList.remove('visible'), 5500);
+  }, 360);
+};
 document.getElementById('titulo-proyecto').textContent = PROYECTO.titulo;
 document.getElementById('subtitulo-proyecto').textContent = PROYECTO.subtitulo;
 document.title = `${PROYECTO.titulo} · Propuesta`;
@@ -151,7 +296,7 @@ const tarjetas = PUNTOS.map((p, i) => {
     <h2>${p.titulo}</h2>
     <p>${marcarPendiente(p.texto)}</p>
     ${p.datos?.length ? `<dl>${p.datos.map(([k, v]) => `<dt>${k}</dt><dd>${marcarPendiente(v)}</dd>`).join('')}</dl>` : ''}
-    ${p.interactivo ? '<span class="accion">● Interactivo: haz clic en los bloques</span>' : ''}`;
+    ${p.interactivo ? `<span class="accion">● Interactivo: ${TACTIL ? 'toca' : 'haz clic en'} los bloques</span>` : ''}`;
   tarjetasEl.appendChild(el);
 
   const etiqueta = num !== '' ? `${num}. ${p.titulo}` : p.titulo;
@@ -181,17 +326,26 @@ function irA(i) { scrollTo({ top: i * alturaSeccion(), behavior: 'smooth' }); }
 const CAMS = PUNTOS.map((p) => v3(p.camara));
 const MIRAS = PUNTOS.map((p) => v3(p.mira));
 const N = PUNTOS.length;
-// Encuadre: la vista se corre para que la estación quede del lado contrario al recuadro de texto
+// Encuadre: la vista se corre para que la estación quede del lado contrario al recuadro de texto.
+// En pantallas angostas (celular) el recuadro va abajo: la cámara se aleja un poco para que la
+// estación quepa a lo ancho y el objeto sube a la parte de arriba de la pantalla.
+const CAMS_ENC = CAMS.map((c) => c.clone());
 const MIRAS_ENC = MIRAS.map((m) => m.clone());
 function calcularEncuadre() {
   const angosta = innerWidth < 720;
+  const aspecto = innerWidth / innerHeight;
+  // cuánto alejar para ver de lado a lado lo mismo que en una pantalla horizontal (con tope)
+  const medioH = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * aspecto);
+  const alejar = aspecto < 1 ? THREE.MathUtils.clamp(0.36 / Math.tan(medioH), 1, 1.6) : 1;
   PUNTOS.forEach((p, i) => {
     const d = MIRAS[i].clone().sub(CAMS[i]);
-    const dist = d.length();
+    const corto = p.sinPin ? 1 : alejar;        // las vistas aéreas ya muestran todo
+    CAMS_ENC[i].copy(MIRAS[i]).addScaledVector(d, -corto);
+    const dist = d.length() * corto;
     const derecha = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize();
     const lado = i % 2 ? 1 : -1;               // recuadro a la derecha (impares) -> objeto a la izquierda
     const off = angosta
-      ? new THREE.Vector3(0, -dist * 0.14, 0)   // en celular el recuadro va abajo: subir el objeto
+      ? new THREE.Vector3(0, -dist * (p.sinPin ? 0.1 : 0.12), 0)   // subir el objeto sobre el recuadro
       : derecha.multiplyScalar(lado * dist * 0.24 * (p.encuadre ?? 1));
     MIRAS_ENC[i].copy(MIRAS[i]).add(off);
   });
@@ -208,8 +362,8 @@ function poseEn(t) {
   const i = THREE.MathUtils.clamp(Math.floor(t), 0, N - 1);
   const j = Math.min(i + 1, N - 1);
   const u = tramo(t - i);
-  tmpP.lerpVectors(CAMS[i], CAMS[j], u);
-  const dist = CAMS[i].distanceTo(CAMS[j]);
+  tmpP.lerpVectors(CAMS_ENC[i], CAMS_ENC[j], u);
+  const dist = CAMS_ENC[i].distanceTo(CAMS_ENC[j]);
   tmpP.y += Math.sin(Math.PI * u) * Math.min(dist * 0.35, 35);   // arco por encima de los árboles
   tmpM.lerpVectors(MIRAS_ENC[i], MIRAS_ENC[j], u);
   return { pos: tmpP, mira: tmpM };
@@ -269,6 +423,7 @@ loader.load(MODELO, (gltf) => {
   scene.add(infinito);
   suelo.push(infinito);
   scene.add(raiz);
+  unirEstaticos(raiz);
   fetch('modelos/personas.json').then((r) => r.json()).then((l) => ubicarPersonas(scene, l.concat(PERSONAS_EXTRA))).catch(() => ubicarPersonas(scene, PERSONAS_EXTRA));
   crearCaminantes(scene);
   document.getElementById('carga').classList.add('listo');
@@ -283,13 +438,67 @@ loader.load(MODELO, (gltf) => {
   pct.textContent = 'No se pudo cargar el modelo. Abre la experiencia con "Abrir experiencia.command".';
 });
 
+// ---------------------------------------------------------------- Optimización: unir lo que no se mueve
+// El modelo trae cientos de piezas sueltas. Las que nunca cambian (suelo, caminos, decks, señales…)
+// se juntan en una malla por material: muchas menos llamadas de dibujo por cuadro, sobre todo
+// con sombras. Se dejan sueltos los objetos que se desvanecen y los bloques del juego.
+function unirEstaticos(raiz) {
+  raiz.updateMatrixWorld(true);
+  const grupos = new Map();
+  const quitar = [];
+  raiz.traverse((o) => {
+    if (!o.isMesh || !o.visible || o.isSkinnedMesh || Array.isArray(o.material)) return;
+    for (let p = o; p && p !== raiz; p = p.parent) {
+      if (TAPABLES.test(p.name) || /^Juego_/.test(p.name) || !p.visible) return;
+    }
+    const g = o.geometry;
+    const firma = [o.material.uuid, o.castShadow, o.receiveShadow, !!g.index,
+      Object.keys(g.attributes).sort().join(',')].join('|');
+    if (!grupos.has(firma)) grupos.set(firma, []);
+    grupos.get(firma).push(o);
+  });
+  let antes = 0, despues = 0;
+  for (const lista of grupos.values()) {
+    antes += lista.length;
+    if (lista.length < 2) { despues++; continue; }
+    const geos = lista.map((o) => o.geometry.clone().applyMatrix4(o.matrixWorld));
+    const unida = mergeGeometries(geos, false);
+    geos.forEach((g) => g.dispose());
+    if (!unida) { despues += lista.length; continue; }
+    const m = new THREE.Mesh(unida, lista[0].material);
+    m.castShadow = lista[0].castShadow; m.receiveShadow = lista[0].receiveShadow;
+    m.name = 'Unido_' + lista[0].name;
+    scene.add(m);
+    quitar.push(...lista);
+    despues++;
+  }
+  quitar.forEach((o) => { o.removeFromParent(); o.geometry.dispose(); });
+  console.info(`Mallas estáticas: ${antes} → ${despues}`);
+}
+
+// ---------------------------------------------------------------- Calidad adaptable
+// Si el equipo no alcanza ~40 cuadros por segundo, se baja la resolución poco a poco
+let cuadrosMedidos = 0, tiempoMedido = 0;
+function ajustarCalidad(dt) {
+  if (document.hidden) return;
+  cuadrosMedidos++; tiempoMedido += dt;
+  if (tiempoMedido < 2) return;
+  const fps = cuadrosMedidos / tiempoMedido;
+  cuadrosMedidos = 0; tiempoMedido = 0;
+  if (fps < 40 && pixelRatio > 0.75) pixelRatio = Math.max(0.75, pixelRatio - 0.25);
+  else if (fps > 57 && pixelRatio < PR_MAX) pixelRatio = Math.min(PR_MAX, pixelRatio + 0.25);
+  else return;
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
+}
+
 // ---------------------------------------------------------------- Transparencia de lo que tapa la vista
 const rayo = new THREE.Raycaster();
 const dir = new THREE.Vector3(), objetivoRayo = new THREE.Vector3();
 const OFFSETS = [[0, 0, 0], [1.6, 0.6, 0], [-1.6, 0.6, 0], [0, 2.2, 0], [0, 0.6, 1.6], [0, 0.6, -1.6]];
 let cuadro = 0;
 function actualizarTapables(mira, dt) {
-  if (++cuadro % 3 === 0) {
+  if (++cuadro % (MOVIL ? 6 : 3) === 0) {
     tapables.forEach((t) => (t.userData.objetivo = 1));
     for (const [ox, oy, oz] of OFFSETS) {
       objetivoRayo.set(mira.x + ox, mira.y + oy, mira.z + oz);
@@ -345,7 +554,7 @@ function actualizarMarcadores() {
   PUNTOS.forEach((p, i) => {
     const m = tarjetas[i].marcador;
     if (!m) return;
-    proy.copy(v3(p.mira)); proy.y += 2.5;
+    proy.copy(v3(p.marcador ?? p.mira)); proy.y += 2.5;   // marcador: si dos estaciones comparten lugar
     proy.project(camera);
     const vis = proy.z < 1 && Math.abs(proy.x) < 1.05 && Math.abs(proy.y) < 1.05;
     m.style.display = vis ? '' : 'none';
@@ -402,6 +611,9 @@ function animarJuegos(dt) {
 let libre = false;
 const controles = new MapControls(camera, canvas);
 controles.enabled = false;
+// MapControls bloquea los gestos táctiles del navegador; fuera del modo libre hay que dejar
+// que el dedo deslice la página (si no, en el celular no se puede recorrer)
+canvas.style.touchAction = 'pan-y';
 controles.enableDamping = true;
 controles.dampingFactor = 0.08;
 controles.screenSpacePanning = false;     // arrastrar mueve sobre el suelo, como un mapa
@@ -409,7 +621,14 @@ controles.zoomToCursor = true;            // la rueda acerca hacia donde apunta 
 controles.maxPolarAngle = THREE.MathUtils.degToRad(86);
 controles.minDistance = 2; controles.maxDistance = 320;
 controles.rotateSpeed = 0.6; controles.panSpeed = 1.2; controles.zoomSpeed = 1.2;
-controles.keyPanSpeed = 0;                // usamos nuestro propio teclado (WASD)
+controles.keyPanSpeed = 0;                // sin teclado: todo con el mouse
+// Solo mouse: clic izquierdo mueve, clic derecho (o la rueda presionada) gira, la rueda acerca.
+controles.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.ROTATE };
+// MapControls cambia mover/girar si se tiene Shift, Ctrl o Cmd presionado: se anula para que
+// el mouse haga siempre lo mismo
+canvas.addEventListener('pointerdown', (ev) => {
+  for (const k of ['shiftKey', 'ctrlKey', 'metaKey']) Object.defineProperty(ev, k, { value: false });
+}, { capture: true });
 
 const vuelo = { activo: false, t: 0, desdeP: new THREE.Vector3(), haciaP: new THREE.Vector3(),
   desdeM: new THREE.Vector3(), haciaM: new THREE.Vector3() };
@@ -425,8 +644,9 @@ function alternarLibre(on = !libre) {
   libre = on;
   document.body.classList.toggle('libre', libre);
   document.body.style.overflow = libre ? 'hidden' : '';
-  btnLibre.textContent = libre ? 'Volver al recorrido' : 'Explorar libre';
+  btnLibre.textContent = libre ? (innerWidth < 720 ? 'Volver' : 'Volver al recorrido') : 'Explorar libre';
   controles.enabled = libre;
+  canvas.style.touchAction = libre ? 'none' : 'pan-y';
   vuelo.activo = false;
   canvas.style.cursor = libre ? 'grab' : '';
   if (libre) {
@@ -460,52 +680,31 @@ function girar(a) {
   const off = camera.position.clone().sub(controles.target).applyAxisAngle(EJE_Y, a);
   volarA(controles.target.clone().add(off), controles.target.clone());
 }
-// Doble clic: volar hacia ese punto
-canvas.addEventListener('dblclick', (ev) => {
-  if (!libre) return;
+// Doble clic (o doble toque en el celular): volar hacia ese punto
+let ultimoToque = 0, ultimoToqueXY = [0, 0];
+canvas.addEventListener('pointerup', (ev) => {
+  if (!libre || ev.pointerType !== 'touch') return;
+  const ahora = performance.now();
+  const cerca = Math.hypot(ev.clientX - ultimoToqueXY[0], ev.clientY - ultimoToqueXY[1]) < 30;
+  if (ahora - ultimoToque < 320 && cerca) { volarAlPunto(ev); ultimoToque = 0; return; }
+  ultimoToque = ahora; ultimoToqueXY = [ev.clientX, ev.clientY];
+});
+canvas.addEventListener('dblclick', (ev) => { if (libre) volarAlPunto(ev); });
+function volarAlPunto(ev) {
   ray.setFromCamera(aNDC(ev), camera);
   const h = ray.intersectObjects(scene.children, true)[0];
   if (!h) return;
   const off = camera.position.clone().sub(controles.target);
   off.setLength(Math.min(Math.max(off.length() * 0.5, 10), 40));
   volarA(h.point.clone().add(off), h.point.clone());
-});
-// Teclado: WASD / flechas para caminar, Q/E para girar, R/F (o +/-) para acercar/alejar
-const teclas = new Set();
+}
+// Teclado: en el modo libre todo se hace con el mouse; Esc vuelve al recorrido.
+// Fuera del modo libre, flechas / espacio pasan de estación.
 addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && libre) return alternarLibre(false);
-  if (libre) { teclas.add(e.key.toLowerCase()); if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault(); return; }
+  if (libre) { if (e.key === 'Escape') alternarLibre(false); return; }
   if (['ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); irA(Math.min(Math.round(tActual) + 1, N - 1)); }
   if (['ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); irA(Math.max(Math.round(tActual) - 1, 0)); }
 });
-addEventListener('keyup', (e) => teclas.delete(e.key.toLowerCase()));
-addEventListener('blur', () => teclas.clear());
-const adelante = new THREE.Vector3(), lado = new THREE.Vector3(), mov = new THREE.Vector3();
-function moverConTeclado(dt) {
-  if (!teclas.size) return;
-  vuelo.activo = false;
-  const dist = camera.position.distanceTo(controles.target);
-  const vel = THREE.MathUtils.clamp(dist * 0.9, 8, 120) * dt;
-  camera.getWorldDirection(adelante); adelante.y = 0; adelante.normalize();
-  lado.crossVectors(adelante, EJE_Y);
-  mov.set(0, 0, 0);
-  if (teclas.has('w') || teclas.has('arrowup')) mov.add(adelante);
-  if (teclas.has('s') || teclas.has('arrowdown')) mov.sub(adelante);
-  if (teclas.has('d') || teclas.has('arrowright')) mov.add(lado);
-  if (teclas.has('a') || teclas.has('arrowleft')) mov.sub(lado);
-  if (mov.lengthSq()) { mov.normalize().multiplyScalar(vel); camera.position.add(mov); controles.target.add(mov); }
-  const giro = (teclas.has('e') ? 1 : 0) - (teclas.has('q') ? 1 : 0);
-  if (giro) {
-    const off = camera.position.clone().sub(controles.target).applyAxisAngle(EJE_Y, -giro * dt * 1.4);
-    camera.position.copy(controles.target).add(off);
-  }
-  const zoom = (teclas.has('r') || teclas.has('+') || teclas.has('=') ? 1 : 0) - (teclas.has('f') || teclas.has('-') ? 1 : 0);
-  if (zoom) {
-    const off = camera.position.clone().sub(controles.target);
-    const d = THREE.MathUtils.clamp(off.length() * (1 - zoom * dt * 1.5), controles.minDistance, controles.maxDistance);
-    camera.position.copy(controles.target).add(off.setLength(d));
-  }
-}
 function limitarLibre() {
   controles.target.x = THREE.MathUtils.clamp(controles.target.x, -150, 150);
   controles.target.z = THREE.MathUtils.clamp(controles.target.z, -150, 150);
@@ -528,7 +727,6 @@ function frame() {
       controles.target.lerpVectors(vuelo.desdeM, vuelo.haciaM, u);
       if (vuelo.t >= 1) vuelo.activo = false;
     }
-    moverConTeclado(dt);
     controles.update();
     limitarLibre();
     miraActual.copy(controles.target);
@@ -546,14 +744,14 @@ function frame() {
   actualizarTapables(miraActual, dt);
   animarJuegos(dt);
   animarPersonas(dt);
+  ajustarCalidad(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 frame();
 
 addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
+  ajustarLente();
   renderer.setSize(innerWidth, innerHeight);
   calcularEncuadre();
   onScroll();
@@ -563,6 +761,7 @@ addEventListener('resize', () => {
 window.recorrido = {
   saltar(i) { scrollTo({ top: i * alturaSeccion(), behavior: 'instant' }); tObjetivo = tActual = i; },
   libre: alternarLibre,
-  juegos, scene, THREE,
+  noche: aplicarNoche,
+  juegos, scene, camera, THREE,
   volarA: (c, m) => volarA(v3(c), v3(m)),
 };

@@ -2,7 +2,10 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#3aa6a3" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" crossorigin />
   <title>Recorrido Raíces y Cantos · Propuesta</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -32,7 +35,7 @@
       <h1 id="titulo-proyecto"></h1>
       <p id="subtitulo-proyecto"></p>
     </div>
-    <div class="acciones"><button id="btn-ayuda" title="Cómo moverse">?</button><button id="btn-libre" title="Explorar con el mouse">Explorar libre</button></div>
+    <div class="acciones"><button id="btn-ayuda" title="Cómo moverse">?</button><button id="btn-noche" aria-pressed="false" title="Ver el recorrido de noche"><svg class="ico-luna" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><svg class="ico-sol" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><g stroke-width="2" stroke-linecap="round"><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7l1.7-1.7M17 7l1.7-1.7"/></g></svg><span class="txt">Noche</span></button><button id="btn-libre" title="Explorar libremente">Explorar libre</button></div>
   </header>
 
   <nav id="indice" aria-label="Puntos del recorrido"></nav>
@@ -44,17 +47,25 @@
   <div id="marcadores"></div>
   <div id="ayuda-libre">
     <h3>Explora libremente</h3>
-    <ul>
-      <li><b>Arrastra</b> para moverte por el mapa</li>
-      <li><b>Clic derecho</b> (o Shift) + arrastrar para girar</li>
+    <ul class="solo-tactil">
+      <li><b>Arrastra con un dedo</b> para moverte por el mapa</li>
+      <li><b>Pellizca</b> con dos dedos para acercar o alejar</li>
+      <li><b>Gira dos dedos</b> para rotar la vista</li>
+      <li><b>Toca dos veces</b> para volar a un punto</li>
+      <li>Toca un <b>marcador numerado</b> para ver la información de la estación</li>
+    </ul>
+    <ul class="solo-mouse">
+      <li><b>Arrastra con clic izquierdo</b> para moverte por el mapa</li>
+      <li><b>Arrastra con clic derecho</b> para girar la vista</li>
       <li><b>Rueda</b> para acercar o alejar</li>
       <li><b>Doble clic</b> para volar a un punto</li>
-      <li><b>W A S D</b> para caminar</li>
-      <li>Toca un <b>marcador numerado</b> para ver la información de la estación</li>
+      <li>Haz clic en un <b>marcador numerado</b> para ver la información de la estación</li>
     </ul>
     <p class="cerrar">Toca en cualquier parte para empezar</p>
   </div>
 
+  <div id="fundido"></div>
+  <div id="aviso-noche" role="status">Recorrido nocturno: luz cálida, baja y tenue para no ahuyentar a las aves nocturnas.</div>
   <main id="scroller"></main>
 
   <script type="module" src="app.js"></script>
