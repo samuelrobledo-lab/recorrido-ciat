@@ -617,18 +617,28 @@ canvas.style.touchAction = 'pan-y';
 controles.enableDamping = true;
 controles.dampingFactor = 0.08;
 controles.screenSpacePanning = false;     // arrastrar mueve sobre el suelo, como un mapa
-controles.zoomToCursor = true;            // la rueda acerca hacia donde apunta el mouse
 controles.maxPolarAngle = THREE.MathUtils.degToRad(86);
 controles.minDistance = 2; controles.maxDistance = 320;
 controles.rotateSpeed = 0.6; controles.panSpeed = 1.2; controles.zoomSpeed = 1.2;
 controles.keyPanSpeed = 0;                // sin teclado: todo con el mouse
-// Solo mouse: clic izquierdo mueve, clic derecho (o la rueda presionada) gira, la rueda acerca.
-controles.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.ROTATE };
+// Controles de la exploración libre:
+//  · clic izquierdo + arrastrar → girar alrededor del campus
+//  · clic derecho + arrastrar  → desplazar la vista
+//  · rueda del mouse o + / −    → acercar / alejar (también pellizcar en pantallas táctiles)
+//  · clic en un pin             → ver la ficha del lugar
+//  · botón "Volver al recorrido" → volver a las secciones del recorrido
+controles.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+controles.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+controles.zoomToCursor = true;            // la rueda acerca hacia donde apunta el mouse
 // MapControls cambia mover/girar si se tiene Shift, Ctrl o Cmd presionado: se anula para que
 // el mouse haga siempre lo mismo
 canvas.addEventListener('pointerdown', (ev) => {
   for (const k of ['shiftKey', 'ctrlKey', 'metaKey']) Object.defineProperty(ev, k, { value: false });
 }, { capture: true });
+// Con la guía abierta, la rueda no mueve la cámara (se lee la guía tranquilo)
+addEventListener('wheel', (ev) => {
+  if (libre && ayuda.classList.contains('visible')) { ev.stopPropagation(); ev.preventDefault(); }
+}, { capture: true, passive: false });
 
 const vuelo = { activo: false, t: 0, desdeP: new THREE.Vector3(), haciaP: new THREE.Vector3(),
   desdeM: new THREE.Vector3(), haciaM: new THREE.Vector3() };
@@ -659,18 +669,15 @@ function alternarLibre(on = !libre) {
   }
 }
 btnLibre.onclick = () => alternarLibre();
-// Guía de controles: aparece al entrar a la exploración libre y se va sola
+// Guía "Antes de empezar": aparece al entrar a la exploración libre y se cierra con "Explorar"
 const ayuda = document.getElementById('ayuda-libre');
-let ayudaTimer = 0;
-function mostrarAyuda() {
-  ayuda.classList.add('visible');
-  clearTimeout(ayudaTimer);
-  ayudaTimer = setTimeout(ocultarAyuda, 6000);
-}
-function ocultarAyuda() { ayuda.classList.remove('visible'); clearTimeout(ayudaTimer); }
+function mostrarAyuda() { ayuda.classList.add('visible'); document.getElementById('btn-explorar').focus({ preventScroll: true }); }
+function ocultarAyuda() { ayuda.classList.remove('visible'); }
 document.getElementById('btn-ayuda').onclick = () => (ayuda.classList.contains('visible') ? ocultarAyuda() : mostrarAyuda());
-ayuda.addEventListener('click', ocultarAyuda);
-canvas.addEventListener('pointerdown', () => { if (libre) { ocultarAyuda(); } });
+document.getElementById('btn-explorar').onclick = ocultarAyuda;
+// Botones + / − para acercar y alejar
+document.getElementById('btn-acercar').onclick = () => acercar(0.6);
+document.getElementById('btn-alejar').onclick = () => acercar(1.6);
 function acercar(f) {
   const off = camera.position.clone().sub(controles.target).multiplyScalar(f);
   const d = THREE.MathUtils.clamp(off.length(), controles.minDistance, controles.maxDistance);
@@ -701,7 +708,12 @@ function volarAlPunto(ev) {
 // Teclado: en el modo libre todo se hace con el mouse; Esc vuelve al recorrido.
 // Fuera del modo libre, flechas / espacio pasan de estación.
 addEventListener('keydown', (e) => {
-  if (libre) { if (e.key === 'Escape') alternarLibre(false); return; }
+  if (libre) {
+    if (e.key === 'Escape') { if (ayuda.classList.contains('visible')) ocultarAyuda(); else alternarLibre(false); }
+    if (e.key === '+' || e.key === '=') acercar(0.6);
+    if (e.key === '-') acercar(1.6);
+    return;
+  }
   if (['ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); irA(Math.min(Math.round(tActual) + 1, N - 1)); }
   if (['ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); irA(Math.max(Math.round(tActual) - 1, 0)); }
 });

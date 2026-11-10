@@ -45,23 +45,28 @@
 
   <div id="pista-scroll">Desliza para recorrer <span>↓</span></div>
   <div id="marcadores"></div>
-  <div id="ayuda-libre">
-    <h3>Explora libremente</h3>
-    <ul class="solo-tactil">
-      <li><b>Arrastra con un dedo</b> para moverte por el mapa</li>
-      <li><b>Pellizca</b> con dos dedos para acercar o alejar</li>
-      <li><b>Gira dos dedos</b> para rotar la vista</li>
-      <li><b>Toca dos veces</b> para volar a un punto</li>
-      <li>Toca un <b>marcador numerado</b> para ver la información de la estación</li>
-    </ul>
-    <ul class="solo-mouse">
-      <li><b>Arrastra con clic izquierdo</b> para moverte por el mapa</li>
-      <li><b>Arrastra con clic derecho</b> para girar la vista</li>
-      <li><b>Rueda</b> para acercar o alejar</li>
-      <li><b>Doble clic</b> para volar a un punto</li>
-      <li>Haz clic en un <b>marcador numerado</b> para ver la información de la estación</li>
-    </ul>
-    <p class="cerrar">Toca en cualquier parte para empezar</p>
+  <div id="zoom" aria-label="Acercar o alejar">
+    <button id="btn-acercar" title="Acercar" aria-label="Acercar">+</button>
+    <button id="btn-alejar" title="Alejar" aria-label="Alejar">−</button>
+  </div>
+  <div id="ayuda-libre" role="dialog" aria-modal="true" aria-labelledby="ayuda-titulo">
+    <p class="antes">Antes de empezar</p>
+    <h3 id="ayuda-titulo">Cómo moverte en el mapa</h3>
+    <dl class="controles solo-mouse">
+      <dt>Arrastrar con clic izquierdo</dt><dd>Girar alrededor del campus</dd>
+      <dt>Rueda del mouse o botones + / −</dt><dd>Acercar / alejar</dd>
+      <dt>Arrastrar con clic derecho</dt><dd>Desplazar la vista</dd>
+      <dt>Clic en un pin</dt><dd>Ver la ficha del lugar</dd>
+      <dt>Botón “Volver al recorrido”</dt><dd>Volver a las secciones anteriores</dd>
+    </dl>
+    <dl class="controles solo-tactil">
+      <dt>Arrastrar con un dedo</dt><dd>Girar alrededor del campus</dd>
+      <dt>Botones + / − o pellizcar</dt><dd>Acercar / alejar</dd>
+      <dt>Arrastrar con dos dedos</dt><dd>Desplazar la vista</dd>
+      <dt>Tocar un pin</dt><dd>Ver la ficha del lugar</dd>
+      <dt>Botón “Volver”</dt><dd>Volver a las secciones anteriores</dd>
+    </dl>
+    <div class="pie"><button id="btn-explorar">Explorar</button></div>
   </div>
 
   <div id="fundido"></div>

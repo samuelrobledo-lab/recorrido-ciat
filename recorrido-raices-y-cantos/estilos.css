@@ -113,15 +113,39 @@ body.libre #indice { opacity: .35; pointer-events: none; }
 #pista-scroll span { display: inline-block; animation: bajar 1.4s ease-in-out infinite; }
 @keyframes bajar { 50% { transform: translateY(4px); } }
 #pista-scroll.oculta { opacity: 0; }
-/* ---------- Exploración libre: guía temporal ---------- */
-#ayuda-libre { position: fixed; left: 50%; top: 50%; translate: -50% -50%; z-index: 9; width: min(420px, 88vw);
-  background: rgba(251,249,243,.96); backdrop-filter: blur(8px); border-radius: 20px; box-shadow: var(--sombra);
-  padding: 24px 28px 18px; opacity: 0; pointer-events: none; transform: scale(.96);
-  transition: opacity .45s ease, transform .45s ease; cursor: pointer; }
+/* ---------- Exploración libre: guía "Antes de empezar" ---------- */
+#ayuda-libre { position: fixed; left: 50%; top: 50%; translate: -50% -50%; z-index: 9; width: min(520px, 92vw);
+  max-height: 88svh; overflow-y: auto;
+  background: rgba(251,249,243,.97); backdrop-filter: blur(8px); border-radius: 20px; box-shadow: var(--sombra);
+  padding: 24px 28px 22px; opacity: 0; pointer-events: none; transform: scale(.96);
+  transition: opacity .35s ease, transform .35s ease; }
 #ayuda-libre.visible { opacity: 1; pointer-events: auto; transform: none; }
-#ayuda-libre h3 { font-family: 'Source Sans 3', sans-serif; margin: 0 0 12px; color: var(--bosque); font-size: 1.35rem; }
-#ayuda-libre ul { margin: 0; padding-left: 18px; display: grid; gap: 7px; font-size: .92rem; line-height: 1.4; }
-#ayuda-libre .cerrar { margin: 14px 0 0; font-size: .75rem; color: var(--suave); text-align: center; }
+#ayuda-libre .antes { margin: 0 0 4px; font-size: .74rem; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--c-juegos); }
+#ayuda-libre h3 { font-family: 'Source Sans 3', sans-serif; font-weight: 700; margin: 0 0 16px; color: var(--bosque);
+  font-size: 1.5rem; line-height: 1.15; }
+#ayuda-libre .controles { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 10px 16px;
+  align-items: center; margin: 0; }
+#ayuda-libre dt { font-weight: 700; font-size: .9rem; color: var(--bosque); background: #efe8d8;
+  border: 1px solid #ddd2ba; border-radius: 10px; padding: 9px 12px; }
+#ayuda-libre dd { margin: 0; font-size: .92rem; line-height: 1.3; color: var(--texto); }
+#ayuda-libre .pie { display: flex; justify-content: flex-end; margin-top: 18px; }
+#btn-explorar { border: 0; cursor: pointer; font: 700 .95rem 'Source Sans 3', sans-serif; padding: 11px 26px;
+  border-radius: 99px; background: var(--bosque); color: var(--crema); box-shadow: var(--sombra); transition: background .2s, transform .2s; }
+#btn-explorar:hover { background: var(--bosque-2); transform: translateY(-1px); }
+body.noche #ayuda-libre { background: rgba(16, 26, 52, .96); }
+body.noche #ayuda-libre h3, body.noche #ayuda-libre dd { color: #f3ead8; }
+body.noche #ayuda-libre dt { background: rgba(243,234,216,.08); border-color: rgba(243,234,216,.2); color: #f3ead8; }
+body.noche #btn-explorar { background: #f3ead8; color: #1d2a4a; }
+
+/* ---------- Botones + / − (solo exploración libre) ---------- */
+#zoom { position: fixed; right: 24px; bottom: 28px; z-index: 6; display: none; flex-direction: column; gap: 8px; }
+body.libre #zoom { display: flex; }
+#zoom button { width: 44px; height: 44px; border: 0; border-radius: 12px; cursor: pointer; font: 700 1.4rem/1 'Source Sans 3', sans-serif;
+  background: rgba(251,249,243,.94); color: var(--bosque); box-shadow: var(--sombra); transition: transform .15s, background .2s; }
+#zoom button:hover { transform: translateY(-1px); background: #fff; }
+#zoom button:active { transform: scale(.95); }
+body.noche #zoom button { background: rgba(29, 42, 74, .94); color: #f3ead8; }
 
 /* ---------- Marcadores de estaciones (solo exploración libre) ---------- */
 #marcadores { position: fixed; inset: 0; z-index: 6; pointer-events: none; display: none; }
@@ -216,9 +240,12 @@ body.noche #btn-libre { background: #f3ead8; color: #1d2a4a; }
     font-size: .75rem; padding: 6px 12px; }
   body.libre #pista-scroll { display: none; }
 
-  #ayuda-libre { padding: 20px 20px 14px; }
-  #ayuda-libre h3 { font-size: 1.15rem; }
-  #ayuda-libre ul { font-size: .88rem; }
+  #ayuda-libre { padding: 18px 18px 16px; }
+  #ayuda-libre h3 { font-size: 1.2rem; margin-bottom: 12px; }
+  #ayuda-libre .controles { gap: 8px 10px; }
+  #ayuda-libre dt { font-size: .8rem; padding: 7px 9px; }
+  #ayuda-libre dd { font-size: .82rem; }
+  #zoom { right: 10px; top: 50%; bottom: auto; translate: 0 -50%; }
   .marcador .gota { width: 30px; height: 30px; }
   .marcador .nombre { opacity: 1; translate: 0 0; font-size: .68rem; padding: 3px 7px; }
 }
